@@ -73,45 +73,43 @@ function Set-NdkVersion([string]$Path, [string]$Version) {
 
 function Comment-Block([string]$Path, [string]$BlockName) {
     $Text = Read-Text $Path
-    $Match = [regex]::Match($Text, "(?m)^[ \t]*$BlockName[ \t]*\{")
-    if (!$Match.Success) {
-        Write-Host "No $BlockName block in $Path"
-        return
-    }
+    $Count = 0
 
-    $Open = $Text.IndexOf('{', $Match.Index)
-    $Depth = 0
-    $Close = -1
-    for ($i = $Open; $i -lt $Text.Length; $i++) {
-        if ($Text[$i] -eq '{') { $Depth++ }
-        elseif ($Text[$i] -eq '}') {
-            $Depth--
-            if ($Depth -eq 0) {
-                $Close = $i
-                break
+    while ($true) {
+        $Match = [regex]::Match($Text, "(?m)^[ \t]*$BlockName[ \t]*\{")
+        if (!$Match.Success) {
+            break
+        }
+
+        $Open = $Text.IndexOf('{', $Match.Index)
+        $Depth = 0
+        $Close = -1
+        for ($i = $Open; $i -lt $Text.Length; $i++) {
+            if ($Text[$i] -eq '{') { $Depth++ }
+            elseif ($Text[$i] -eq '}') {
+                $Depth--
+                if ($Depth -eq 0) {
+                    $Close = $i
+                    break
+                }
             }
         }
+
+        if ($Close -lt 0) {
+            throw "Could not find the end of $BlockName in $Path"
+        }
+
+        $BlockText = $Text.Substring($Match.Index, $Close - $Match.Index + 1)
+        $Commented = (($BlockText -split "`r?`n") | ForEach-Object {
+            if ($_.Trim().Length -eq 0) { $_ } else { "// " + $_ }
+        }) -join "`r`n"
+
+        $Text = $Text.Substring(0, $Match.Index) + $Commented + $Text.Substring($Close + 1)
+        $Count++
     }
 
-    if ($Close -lt 0) {
-        throw "Could not find the end of $BlockName in $Path"
-    }
-
-    $BlockText = $Text.Substring($Match.Index, $Close - $Match.Index + 1)
-    $FirstNonEmptyLine = ($BlockText -split "`r?`n" |
-        Where-Object { $_.Trim().Length -gt 0 } |
-        Select-Object -First 1)
-    if ($FirstNonEmptyLine -match '^\s*//') {
-        Write-Host "Already commented: $Path ($BlockName)"
-        return
-    }
-
-    $Commented = (($BlockText -split "`r?`n") | ForEach-Object {
-        if ($_.Trim().Length -eq 0) { $_ } else { "// " + $_ }
-    }) -join "`r`n"
-
-    Write-Text $Path ($Text.Substring(0, $Match.Index) + $Commented + $Text.Substring($Close + 1))
-    Write-Host "Commented ${BlockName}: $Path"
+    Write-Text $Path $Text
+    Write-Host "Commented $Count $BlockName block(s): $Path"
 }
 
 function Escape-LocalPropertyPath([string]$Path) {
