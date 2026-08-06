@@ -1,7 +1,7 @@
 param(
     [string]$Repository = "chuankuancao-png/cocos",
     [string]$ReleaseTag = "2.4.13",
-    [string]$AssetName = "lib.zip",
+    [string]$AssetName = "libs.zip",
     [string]$NdkVersion = "28.2.13676358"
 )
 
@@ -98,7 +98,10 @@ function Comment-Block([string]$Path, [string]$BlockName) {
     }
 
     $BlockText = $Text.Substring($Match.Index, $Close - $Match.Index + 1)
-    if ($BlockText -match '(?m)^\s*//') {
+    $FirstNonEmptyLine = ($BlockText -split "`r?`n" |
+        Where-Object { $_.Trim().Length -gt 0 } |
+        Select-Object -First 1)
+    if ($FirstNonEmptyLine -match '^\s*//') {
         Write-Host "Already commented: $Path ($BlockName)"
         return
     }
