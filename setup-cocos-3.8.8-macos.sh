@@ -62,7 +62,14 @@ def comment_all(path, name):
         text = text[:start] + block + text[end + 1:]
     write(path, text)
 
-gradles = list(root.rglob("*.gradle")) + list(root.rglob("*.gradle.kts"))
+gradles = []
+for candidate in list(root.rglob("*.gradle")) + list(root.rglob("*.gradle.kts")):
+    if not candidate.is_file():
+        continue
+    relative_parts = candidate.relative_to(root).parts
+    if relative_parts and relative_parts[0] in {".gradle", "build"}:
+        continue
+    gradles.append(candidate)
 for path in gradles:
     text = read(path)
     if path.name == "build.gradle" and path.parent == root:
