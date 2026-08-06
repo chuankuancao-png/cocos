@@ -60,10 +60,11 @@ function Set-NdkVersion([string]$Path, [string]$Version) {
     $Body = $Text.Substring($Block.Open + 1, $Block.Close - $Block.Open - 1)
     $After = $Text.Substring($Block.Close)
 
+    $NdkLine = "`r`n    ndkVersion " + [char]34 + $Version + [char]34
     if ($Body -match '(?m)^\s*ndkVersion\s+') {
-        $Body = [regex]::Replace($Body, '(?m)^\s*ndkVersion\s+[^\r\n]+', "`r`n    ndkVersion \"$Version\"")
+        $Body = [regex]::Replace($Body, '(?m)^\s*ndkVersion\s+[^\r\n]+', $NdkLine)
     } else {
-        $Body = "`r`n    ndkVersion \"$Version\"" + $Body
+        $Body = $NdkLine + $Body
     }
 
     Write-Text $Path ($Before + $Body + $After)
@@ -179,9 +180,9 @@ Write-Text $GradlePropertiesPath $Text
 # 7. Remove the external libcocos2dx Gradle project and retain instantapp.
 $SettingsPath = Join-Path $ProjectRoot "settings.gradle"
 $Text = Read-Text $SettingsPath
-$Text = [regex]::Replace($Text, "(?m)^\s*include\s+['\"]:libcocos2dx['\"]\s*,\s*['\"]:instantapp['\"]\s*$", "include ':instantapp'")
-$Text = [regex]::Replace($Text, "(?m)^\s*include\s+['\"]:libcocos2dx['\"]\s*$", "")
-$Text = [regex]::Replace($Text, "(?m)^\s*project\(['\"]:libcocos2dx['\"]\)\.projectDir\s*=.*(?:\r?\n|$)", "")
+$Text = [regex]::Replace($Text, '(?m)^\s*include\s+["\x27]:libcocos2dx["\x27]\s*,\s*["\x27]:instantapp["\x27]\s*$', "include ':instantapp'")
+$Text = [regex]::Replace($Text, '(?m)^\s*include\s+["\x27]:libcocos2dx["\x27]\s*$', "")
+$Text = [regex]::Replace($Text, '(?m)^\s*project\(["\x27]:libcocos2dx["\x27]\)\.projectDir\s*=.*(?:\r?\n|$)', "")
 Write-Text $SettingsPath $Text
 
 # 8. Disable the old local Java library and Gradle project dependency.
@@ -191,7 +192,7 @@ foreach ($GradlePath in @(
 )) {
     $Text = Read-Text $GradlePath
     $Text = [regex]::Replace($Text, "(?m)^(?!\s*//)(\s*implementation\s+fileTree\([^\r\n]*cocos2d-x[^\r\n]*\).*)$", "// `$1")
-    $Text = [regex]::Replace($Text, "(?m)^(?!\s*//)(\s*implementation\s+project\(['\"]:libcocos2dx['\"]\).*)$", "// `$1")
+    $Text = [regex]::Replace($Text, '(?m)^(?!\s*//)(\s*implementation\s+project\(["\x27]:libcocos2dx["\x27]\).*)$', "// `$1")
     Write-Text $GradlePath $Text
 }
 
@@ -207,7 +208,7 @@ if (!$SdkMatch.Success) {
     throw "sdk.dir was not found in $LocalPropertiesPath"
 }
 $SdkDir = Unescape-LocalPropertyPath $SdkMatch.Groups[1].Value
-$NdkDir = Join-Path $SdkDir ("ndk\" + $NdkVersion)
+$NdkDir = Join-Path $SdkDir "ndk\$NdkVersion"
 $EscapedNdkDir = Escape-LocalPropertyPath $NdkDir
 $LocalText = [regex]::Replace($LocalText, "(?m)^\s*ndk\.dir\s*=.*(?:\r?\n|$)", "")
 $LocalText = $LocalText.TrimEnd() + "`r`nndk.dir=$EscapedNdkDir`r`n"
