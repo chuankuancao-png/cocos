@@ -8,7 +8,8 @@
 # 4. 清理与 libcocos-release.aar 重复的 game-sdk、okhttp、okio 等 JAR。
 # 5. 将最低 Android 版本调整为 API 24，因为 libcocos-release.aar 要求 API 24。
 # 6. 增加 R8 对 okhttp 可选依赖的忽略规则。
-# 7. 下载 3.8.8 Release 资源到 app/libs，并执行 assembleRelease。
+# 7. 检查并自动安装 Android 37、Build Tools 37.0.0 和 NDK 28.2.13676358。
+# 8. 下载 3.8.8 Release 资源到 app/libs，并执行 assembleRelease。
 #
 # 使用方式：在项目根目录执行 ./package_android_3.8.8.sh
 set -euo pipefail
@@ -69,6 +70,8 @@ replace "com.android.tools.build:gradle:8.10.1" "com.android.tools.build:gradle:
 replace "gradle-8.11.1-bin.zip" "gradle-8.13-bin.zip" "$ROOT/build/android/proj/gradle/wrapper/gradle-wrapper.properties"
 # Release AAR 的最低系统版本是 Android API 24，不能继续使用 API 21。
 replace "PROP_MIN_SDK_VERSION=21" "PROP_MIN_SDK_VERSION=24" "$ROOT/build/android/proj/gradle.properties"
+replace "PROP_COMPILE_SDK_VERSION=36" "PROP_COMPILE_SDK_VERSION=37" "$ROOT/build/android/proj/gradle.properties"
+replace "PROP_TARGET_SDK_VERSION=36" "PROP_TARGET_SDK_VERSION=37" "$ROOT/build/android/proj/gradle.properties"
 
 # R8 会检查 Cocos 重打包 okhttp 引用的可选依赖；这些依赖不是运行必需项。
 proguard="$ROOT/native/engine/android/app/proguard-rules.pro"
@@ -121,7 +124,28 @@ if [[ "$SKIP_DOWNLOAD" == false ]]; then
   done
 fi
 
+install_android_components() {
+  # 根据 local.properties 的 sdk.dir 检查并安装构建所需的 SDK、Build Tools 和 NDK。
+  local sdk_dir sdkmanager
+  sdk_dir="$(sed -n 's/^sdk\.dir=//p' "$ROOT/build/android/proj/local.properties" | head -n 1 | sed 's/\\://g; s#\\\\#\\#g')"
+  [[ -n "$sdk_dir" ]] || { echo "local.properties 中未找到 sdk.dir" >&2; exit 1; }
+  sdkmanager="$(command -v sdkmanager || true)"
+  for candidate in "$sdk_dir/cmdline-tools/latest/bin/sdkmanager" "$sdk_dir/cmdline-tools/bin/sdkmanager" "$sdk_dir/tools/bin/sdkmanager"; do
+    if [[ -x "$candidate" ]]; then sdkmanager="$candidate"; break; fi
+  done
+  [[ -n "$sdkmanager" ]] || { echo "未找到 sdkmanager: $sdk_dir" >&2; exit 1; }
+  local packages=()
+  [[ -d "$sdk_dir/platforms/android-37" ]] || packages+=("platforms;android-37")
+  [[ -d "$sdk_dir/build-tools/37.0.0" ]] || packages+=("build-tools;37.0.0")
+  [[ -f "$sdk_dir/ndk/28.2.13676358/source.properties" ]] || packages+=("ndk;28.2.13676358")
+  if (( ${#packages[@]} > 0 )); then
+    echo "Installing missing Android components: ${packages[*]}"
+    yes | "$sdkmanager" "${packages[@]}"
+  fi
+}
+
 if [[ "$NO_BUILD" == false ]]; then
+  install_android_components
   # 使用 Gradle Wrapper 构建 Release APK/AAB。
   (cd "$ROOT/build/android/proj" && ./gradlew assembleRelease)
 fi
