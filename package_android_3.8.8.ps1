@@ -35,6 +35,21 @@ function Expand-Zip([string]$Archive, [string]$Destination) {
     [System.IO.Compression.ZipFile]::ExtractToDirectory($Archive, $Destination)
 }
 
+function Use-AndroidStudioJava {
+    # 优先使用 Android Studio 自带的 JetBrains Runtime，避免依赖系统 JAVA_HOME。
+    $programFilesX86 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+    $javaHomes = @(
+        "$env:ProgramFiles\Android\Android Studio\jbr",
+        "$programFilesX86\Android\Android Studio\jbr",
+        "$env:LOCALAPPDATA\Programs\Android Studio\jbr"
+    ) | Where-Object { $_ -and (Test-Path (Join-Path $_ 'bin\java.exe')) }
+    $javaHome = $javaHomes | Select-Object -First 1
+    if (-not $javaHome) { throw '未找到 Android Studio 自带的 Java，请确认 Android Studio 已安装。' }
+    $env:JAVA_HOME = $javaHome
+    $env:Path = "$(Join-Path $javaHome 'bin');$env:Path"
+    Write-Host "Using Android Studio Java: $javaHome"
+}
+
 function Comment-ExternalNativeBuild([string]$Path) {
     # 注释 app 和 instantapp 中全部 externalNativeBuild 块，改用预编译 AAR。
     $lines = [System.IO.File]::ReadAllLines($Path)
@@ -186,6 +201,7 @@ function Install-AndroidComponents {
 }
 
 if ($args -notcontains '--no-build') {
+    Use-AndroidStudioJava
     Install-AndroidComponents
     # 使用 Gradle Wrapper 构建 Release APK/AAB。
     Push-Location "$Root/build/android/proj"; try { & .\gradlew.bat assembleRelease } finally { Pop-Location }
