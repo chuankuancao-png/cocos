@@ -35,19 +35,29 @@ function Expand-Zip([string]$Archive, [string]$Destination) {
     [System.IO.Compression.ZipFile]::ExtractToDirectory($Archive, $Destination)
 }
 
-function Use-AndroidStudioJava {
-    # 优先使用 Android Studio 自带的 JetBrains Runtime，避免依赖系统 JAVA_HOME。
-    $programFilesX86 = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
-    $javaHomes = @(
-        "$env:ProgramFiles\Android\Android Studio\jbr",
-        "$programFilesX86\Android\Android Studio\jbr",
-        "$env:LOCALAPPDATA\Programs\Android Studio\jbr"
-    ) | Where-Object { $_ -and (Test-Path (Join-Path $_ 'bin\java.exe')) }
-    $javaHome = $javaHomes | Select-Object -First 1
-    if (-not $javaHome) { throw '未找到 Android Studio 自带的 Java，请确认 Android Studio 已安装。' }
+function Use-Java21 {
+    # 固定使用 JDK 21，避免不同电脑上的 Android Studio JBR 版本不一致。
+    $javaHome = Join-Path $env:LOCALAPPDATA 'Androidjdk-21'
+    $javaExe = Join-Path $javaHome 'bin\java.exe'
+    if (-not (Test-Path $javaExe)) {
+        $javaTemp = Join-Path $env:TEMP ('j21' + ([guid]::NewGuid().ToString('N').Substring(0, 8)))
+        $javaZip = Join-Path $javaTemp 'jdk21.zip'
+        $javaExtract = Join-Path $javaTemp 'extract'
+        New-Item -ItemType Directory -Path $javaExtract -Force | Out-Null
+        $javaApi = 'https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jdk&os=windows&vendor=eclipse'
+        $javaPackage = (Invoke-RestMethod -Uri $javaApi -Headers @{ 'User-Agent' = 'cocos-android-packager' })[0].binary.package.link
+        Write-Host 'JDK 21 not found; downloading Eclipse Temurin JDK 21...'
+        if (Get-Command curl.exe -ErrorAction SilentlyContinue) { & curl.exe -fL --retry 3 --output $javaZip $javaPackage } else { Invoke-WebRequest $javaPackage -OutFile $javaZip }
+        Expand-Zip $javaZip $javaExtract
+        $javaRoot = Get-ChildItem $javaExtract -Directory | Select-Object -First 1
+        New-Item -ItemType Directory -Path $javaHome -Force | Out-Null
+        Copy-Item (Join-Path $javaRoot.FullName '*') $javaHome -Recurse -Force
+        Remove-Item $javaTemp -Recurse -Force
+    }
+    if (-not (Test-Path $javaExe)) { throw 'JDK 21 安装失败，未找到 java.exe。' }
     $env:JAVA_HOME = $javaHome
     $env:Path = "$(Join-Path $javaHome 'bin');$env:Path"
-    Write-Host "Using Android Studio Java: $javaHome"
+    Write-Host "Using JDK 21: $javaHome"
 }
 
 function Comment-ExternalNativeBuild([string]$Path) {
@@ -201,7 +211,7 @@ function Install-AndroidComponents {
 }
 
 if ($args -notcontains '--no-build') {
-    Use-AndroidStudioJava
+    Use-Java21
     Install-AndroidComponents
     # 使用 Gradle Wrapper 构建 Release APK/AAB。
     Push-Location "$Root/build/android/proj"; try { & .\gradlew.bat assembleRelease } finally { Pop-Location }
