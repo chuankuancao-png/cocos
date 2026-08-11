@@ -72,8 +72,8 @@ if ($args -notcontains '--skip-download') {
     $source = Get-ChildItem $extract -Directory -Recurse | Where-Object Name -eq 'libs' | Select-Object -First 1
     if (-not $source) { $source = Get-Item $extract }
     Copy-Item "$($source.FullName)\*" $libs -Recurse -Force
-    if (Test-Path "$libs\libcocos-release.aar") {
-        Get-ChildItem $libs -File | Where-Object { $_.Name -in @('com.android.vending.expansion.zipfile.jar', 'game-sdk.jar') -or $_.Name -like 'okhttp-*.jar' -or $_.Name -like 'okio-*.jar' } | Remove-Item -Force
+    if (Get-ChildItem $libs -File -Filter 'libcocos-*.aar') {
+        Get-ChildItem $libs -File | Where-Object { $_.Name -in @('com.android.vending.expansion.zipfile.jar', 'game-sdk.jar') -or $_.Name -like 'okhttp-*.jar' -or $_.Name -like 'okio-*.jar' } | ForEach-Object { Write-Host "删除重复依赖: $($_.Name)"; Remove-Item $_.FullName -Force }
     }
     Remove-Item $tmp -Recurse -Force
 }
