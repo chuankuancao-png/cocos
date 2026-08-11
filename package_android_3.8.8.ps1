@@ -122,9 +122,9 @@ function Install-AndroidComponents {
         }
     }
     if (-not $sdkManager) { throw "未找到 sdkmanager: $sdkDir" }
-    if (-not (Test-Path "$sdkDir/platforms/android-37")) {
-        Write-Host 'Installing missing Android component: platforms;android-37'
-        & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37'
+    if (-not (Test-Path "$sdkDir/platforms/android-37.0")) {
+        Write-Host 'Installing missing Android component: platforms;android-37.0'
+        & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37.0'
     }
     if (-not (Test-Path "$sdkDir/build-tools/37.0.0")) { Write-Host 'Installing missing Android component: build-tools;37.0.0'; & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=1' 'build-tools;37.0.0' }
     if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { Write-Host 'Installing missing Android component: ndk;28.2.13676358'; & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=0' 'ndk;28.2.13676358' }
