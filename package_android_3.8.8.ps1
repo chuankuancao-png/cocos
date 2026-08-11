@@ -182,8 +182,7 @@ function Install-AndroidComponents {
     }
     if (-not $sdkManagerPath) {
         # Android SDK Command-line Tools  Windows 
-        $toolsVersion = '15859902'
-        $toolsUrl = "https://dl.google.com/android/repository/commandlinetools-win-${toolsVersion}_latest.zip"
+        $toolsUrl = 'https://dl.google.com/android/repository/commandlinetools-win-latest.zip'
         #  tar.exe  Windows 
         $toolsTemp = Join-Path $env:TEMP ('a' + ([guid]::NewGuid().ToString('N').Substring(0, 8)))
         $toolsZip = Join-Path $toolsTemp 'commandlinetools.zip'
@@ -204,23 +203,15 @@ function Install-AndroidComponents {
     }
     if (-not $sdkManagerPath) { throw " sdkmanager Android Command-line Tools: $sdkDir" }
     $platform37 = "$sdkDir/platforms/android-37"
-    $platform370 = "$sdkDir/platforms/android-37.0"
-    if (-not (Test-Path $platform37) -and -not (Test-Path $platform370)) {
-        Write-Host 'Installing missing Android component: platforms;android-37'
-        & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37'
-        if ($LASTEXITCODE -ne 0 -and -not (Test-Path $platform37)) {
-            Write-Host 'Trying alternate Android platform package: platforms;android-37.0'
-            & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37.0'
-        }
-    }
-    if (-not (Test-Path $platform37) -and (Test-Path $platform370)) {
-        Write-Host 'Creating Gradle-compatible Android platform alias: android-37'
-        Copy-Item $platform370 $platform37 -Recurse -Force
-    }
     if (-not (Test-Path $platform37)) {
-        throw 'Android platform 37 was not installed or found.'
+        Write-Host 'Installing Android platform 37'
+        & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37'
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $platform37)) { throw 'Android platform 37 installation failed.' }
     }
-    if (-not (Test-Path "$sdkDir/build-tools/37.0.0")) { Write-Host 'Installing missing Android component: build-tools;37.0.0'; & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'build-tools;37.0.0' }
+    $sdkList = & $sdkManagerPath ("--sdk_root=$sdkDir") '--list' 2>$null
+    $latestBuildTools = $sdkList | ForEach-Object { if ($_ -match '^s*build-tools;([0-9.]+)s') { $Matches[1] } } | Sort-Object { [version]$_ } -Descending | Select-Object -First 1
+    if (-not $latestBuildTools) { throw 'No Android Build Tools package found.' }
+    if (-not (Test-Path "$sdkDir/build-tools/$latestBuildTools")) { Write-Host "Installing latest Android Build Tools: $latestBuildTools"; & $sdkManagerPath ("--sdk_root=$sdkDir") "build-tools;$latestBuildTools" }
     if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { Write-Host 'Installing missing Android component: ndk;28.2.13676358'; & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=0' 'ndk;28.2.13676358' }
 }
 
