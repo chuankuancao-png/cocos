@@ -240,13 +240,13 @@ function Install-AndroidComponents {
             Remove-Item $staleAlias -Recurse -Force
         }
     }
+    $propertiesPath = "$Root/build/android/proj/gradle.properties"
+    $propertiesText = Get-Content -Raw -LiteralPath $propertiesPath
+    $propertiesText = [regex]::Replace($propertiesText, '(?m)^PROP_COMPILE_SDK_VERSION=.*$', 'PROP_COMPILE_SDK_VERSION=android-37.0')
+    Set-Content -LiteralPath $propertiesPath -Value $propertiesText -NoNewline
     if ($installExitCode -ne 0 -or -not (Test-Path $platform370) -or -not (Test-Path "$sdkDir/build-tools/37.0.0") -or -not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) {
         throw 'sdkmanager failed to install the required SDK components.'
     }
-    $propertiesPath = "$Root/build/android/proj/gradle.properties"
-    $propertiesText = Get-Content -Raw -LiteralPath $propertiesPath
-    $propertiesText = [regex]::Replace($propertiesText, '(?m)^PROP_COMPILE_SDK_VERSION=.*$', 'PROP_COMPILE_SDK_VERSION=37.0')
-    Set-Content -LiteralPath $propertiesPath -Value $propertiesText -NoNewline
 }
 
 if ($args -notcontains '--no-build') {
