@@ -135,9 +135,9 @@ install_android_components() {
     if [[ -x "$candidate" ]]; then sdkmanager="$candidate"; break; fi
   done
   [[ -n "$sdkmanager" ]] || { echo "未找到 sdkmanager: $sdk_dir" >&2; exit 1; }
-  if [[ ! -d "$sdk_dir/platforms/android-37" ]]; then
-    echo "Installing missing Android component: platforms;android-37"
-    yes | "$sdkmanager" --sdk_root="$sdk_dir" --channel=1 "platforms;android-37"
+  if [[ ! -d "$sdk_dir/platforms/android-37.0" ]]; then
+    echo "Installing missing Android component: platforms;android-37.0"
+    yes | "$sdkmanager" --sdk_root="$sdk_dir" --channel=1 "platforms;android-37.0"
   fi
   if [[ ! -d "$sdk_dir/build-tools/37.0.0" ]]; then
     echo "Installing missing Android component: build-tools;37.0.0"
