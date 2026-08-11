@@ -56,7 +56,8 @@ function Use-Java21 {
     }
     if (-not (Test-Path $javaExe)) { throw 'JDK 21 安装失败，未找到 java.exe。' }
     $env:JAVA_HOME = $javaHome
-    $env:Path = "$(Join-Path $javaHome 'bin');$env:Path"
+    $javaBin = Join-Path $javaHome 'bin'
+    $env:Path = "$javaBin;$env:Path"
     Write-Host "Using JDK 21: $javaHome"
 }
 
