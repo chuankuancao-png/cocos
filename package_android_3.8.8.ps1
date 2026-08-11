@@ -203,9 +203,22 @@ function Install-AndroidComponents {
         $sdkManagerPath = "$latestDir/bin/sdkmanager.bat"
     }
     if (-not $sdkManagerPath) { throw " sdkmanager Android Command-line Tools: $sdkDir" }
-    if (-not (Test-Path "$sdkDir/platforms/android-37.0")) {
-        Write-Host 'Installing missing Android component: platforms;android-37.0'
-        & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37.0'
+    $platform37 = "$sdkDir/platforms/android-37"
+    $platform370 = "$sdkDir/platforms/android-37.0"
+    if (-not (Test-Path $platform37) -and -not (Test-Path $platform370)) {
+        Write-Host 'Installing missing Android component: platforms;android-37'
+        & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37'
+        if ($LASTEXITCODE -ne 0 -and -not (Test-Path $platform37)) {
+            Write-Host 'Trying alternate Android platform package: platforms;android-37.0'
+            & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37.0'
+        }
+    }
+    if (-not (Test-Path $platform37) -and (Test-Path $platform370)) {
+        Write-Host 'Creating Gradle-compatible Android platform alias: android-37'
+        Copy-Item $platform370 $platform37 -Recurse -Force
+    }
+    if (-not (Test-Path $platform37)) {
+        throw 'Android platform 37 was not installed or found.'
     }
     if (-not (Test-Path "$sdkDir/build-tools/37.0.0")) { Write-Host 'Installing missing Android component: build-tools;37.0.0'; & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'build-tools;37.0.0' }
     if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { Write-Host 'Installing missing Android component: ndk;28.2.13676358'; & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=0' 'ndk;28.2.13676358' }
