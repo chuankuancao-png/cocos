@@ -126,6 +126,7 @@ fi
 
 install_android_components() {
   # 根据 local.properties 的 sdk.dir 检查并安装构建所需的 SDK、Build Tools 和 NDK。
+  # 使用 sdk_root 和 channel=1，确保能发现 Android 37 / Android 17 的新频道资源。
   local sdk_dir sdkmanager
   sdk_dir="$(sed -n 's/^sdk\.dir=//p' "$ROOT/build/android/proj/local.properties" | head -n 1 | sed 's/\\://g; s#\\\\#\\#g')"
   [[ -n "$sdk_dir" ]] || { echo "local.properties 中未找到 sdk.dir" >&2; exit 1; }
@@ -134,13 +135,17 @@ install_android_components() {
     if [[ -x "$candidate" ]]; then sdkmanager="$candidate"; break; fi
   done
   [[ -n "$sdkmanager" ]] || { echo "未找到 sdkmanager: $sdk_dir" >&2; exit 1; }
-  local packages=()
-  [[ -d "$sdk_dir/platforms/android-37" ]] || packages+=("platforms;android-37")
-  [[ -d "$sdk_dir/build-tools/37.0.0" ]] || packages+=("build-tools;37.0.0")
-  [[ -f "$sdk_dir/ndk/28.2.13676358/source.properties" ]] || packages+=("ndk;28.2.13676358")
-  if (( ${#packages[@]} > 0 )); then
-    echo "Installing missing Android components: ${packages[*]}"
-    yes | "$sdkmanager" "${packages[@]}"
+  if [[ ! -d "$sdk_dir/platforms/android-37" ]]; then
+    echo "Installing missing Android component: platforms;android-37"
+    yes | "$sdkmanager" --sdk_root="$sdk_dir" --channel=1 "platforms;android-37"
+  fi
+  if [[ ! -d "$sdk_dir/build-tools/37.0.0" ]]; then
+    echo "Installing missing Android component: build-tools;37.0.0"
+    yes | "$sdkmanager" --sdk_root="$sdk_dir" --channel=1 "build-tools;37.0.0"
+  fi
+  if [[ ! -f "$sdk_dir/ndk/28.2.13676358/source.properties" ]]; then
+    echo "Installing missing Android component: ndk;28.2.13676358"
+    yes | "$sdkmanager" --sdk_root="$sdk_dir" --channel=0 "ndk;28.2.13676358"
   fi
 }
 
