@@ -1,34 +1,34 @@
 $ErrorActionPreference = 'Stop'
-# Cocos Creator 3.8.8 Android 打包脚本（Windows PowerShell）
+# Cocos Creator 3.8.8 Android Windows PowerShell
 #
-# 项目需要完成的处理：
-# 1. 升级 Android Gradle Plugin 和 Gradle Wrapper。
-# 2. 把工程路径改成当前项目根目录，避免依赖其他电脑的绝对路径。
-# 3. 使用 Release 包提供的 libcocos-release.aar，停用旧的 libcocos 工程和外部重复 JAR。
-# 4. 清理与 libcocos-release.aar 重复的 game-sdk、okhttp、okio 等 JAR。
-# 5. 将最低 Android 版本调整为 API 24，因为 libcocos-release.aar 要求 API 24。
-# 6. 增加 R8 对 okhttp 可选依赖的忽略规则。
-# 7. 检查并自动安装 Android 37、Build Tools 37.0.0 和 NDK 28.2.13676358。
-# 8. 下载 3.8.8 Release 资源到 app/libs，并执行 assembleRelease。
+# 
+# 1.  Android Gradle Plugin  Gradle Wrapper
+# 2. 
+# 3.  Release  libcocos-release.aar libcocos  JAR
+# 4.  libcocos-release.aar  game-sdkokhttpokio  JAR
+# 5.  Android  API 24 libcocos-release.aar  API 24
+# 6.  R8  okhttp 
+# 7.  Android 37Build Tools 37.0.0  NDK 28.2.13676358
+# 8.  3.8.8 Release  app/libs assembleRelease
 #
-# 使用方式：在项目根目录执行 .\package_android_3.8.8.ps1
+#  .\package_android_3.8.8.ps1
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '.')).Path
-if ((Resolve-Path (Get-Location)).Path -ne $Root) { throw "请在项目根目录执行：$Root" }
+if ((Resolve-Path (Get-Location)).Path -ne $Root) { throw "$Root" }
 
 function Replace-Text([string]$Path, [string]$Old, [string]$New) {
-    # 对项目配置文件执行幂等文本替换，脚本重复运行不会重复修改。
+    # 
     $text = Get-Content -Raw -LiteralPath $Path
     $text = $text.Replace($Old, $New)
     Set-Content -LiteralPath $Path -Value $text -NoNewline
 }
 
 function Expand-Zip([string]$Archive, [string]$Destination) {
-    # Windows PowerShell 5.1 的 Expand-Archive 和 .NET 解压都可能碰到深层 ZIP 路径。
-    # Windows 10/11 自带的 tar.exe 能正确处理 Android Command-line Tools 的长路径。
+    # Windows PowerShell 5.1  Expand-Archive  .NET  ZIP 
+    # Windows 10/11  tar.exe  Android Command-line Tools 
     $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
     if ($tar) {
         & $tar.Source -xf $Archive -C $Destination
-        if ($LASTEXITCODE -ne 0) { throw "tar.exe 解压失败: $Archive" }
+        if ($LASTEXITCODE -ne 0) { throw "tar.exe : $Archive" }
         return
     }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -36,7 +36,7 @@ function Expand-Zip([string]$Archive, [string]$Destination) {
 }
 
 function Use-Java21 {
-    # 固定使用 JDK 21，避免不同电脑上的 Android Studio JBR 版本不一致。
+    #  JDK 21 Android Studio JBR 
     $javaHome = Join-Path $env:LOCALAPPDATA "Android\jdk-21"
     $javaExe = Join-Path $javaHome "bin\java.exe"
     if (-not (Test-Path $javaExe)) {
@@ -54,7 +54,7 @@ function Use-Java21 {
         Copy-Item (Join-Path $javaRoot.FullName '*') $javaHome -Recurse -Force
         Remove-Item $javaTemp -Recurse -Force
     }
-    if (-not (Test-Path $javaExe)) { throw 'JDK 21 安装失败，未找到 java.exe。' }
+    if (-not (Test-Path $javaExe)) { throw 'JDK 21  java.exe' }
     $env:JAVA_HOME = $javaHome
     $javaBin = Join-Path $javaHome "bin"
     $env:Path = "$javaBin;$env:Path"
@@ -62,7 +62,7 @@ function Use-Java21 {
 }
 
 function Comment-ExternalNativeBuild([string]$Path) {
-    # 注释 app 和 instantapp 中全部 externalNativeBuild 块，改用预编译 AAR。
+    #  app  instantapp  externalNativeBuild  AAR
     $lines = [System.IO.File]::ReadAllLines($Path)
     $out = [System.Collections.Generic.List[string]]::new()
     for ($i = 0; $i -lt $lines.Count;) {
@@ -82,15 +82,15 @@ Replace-Text "$Root/build/android/proj/gradle/wrapper/gradle-wrapper.properties"
 Replace-Text "$Root/build/android/proj/gradle.properties" 'PROP_MIN_SDK_VERSION=21' 'PROP_MIN_SDK_VERSION=24'
 Replace-Text "$Root/build/android/proj/gradle.properties" 'PROP_COMPILE_SDK_VERSION=36' 'PROP_COMPILE_SDK_VERSION=37'
 Replace-Text "$Root/build/android/proj/gradle.properties" 'PROP_TARGET_SDK_VERSION=36' 'PROP_TARGET_SDK_VERSION=37'
-# Release AAR 的最低系统版本是 Android API 24，不能继续使用 API 21。
+# Release AAR  Android API 24 API 21
 
-# R8 会检查 Cocos 重打包 okhttp 引用的可选依赖；这些依赖不是运行必需项。
+# R8  Cocos  okhttp 
 $proguard = "$Root/native/engine/android/app/proguard-rules.pro"
 $proguardText = Get-Content -Raw -LiteralPath $proguard
 if ($proguardText -notmatch 'javax\.annotation\.\*\*') { Add-Content -LiteralPath $proguard -Value "`r`n# Optional dependencies referenced by the Cocos-shaded okhttp implementation.`r`n-dontwarn javax.annotation.**`r`n-dontwarn org.codehaus.mojo.animal_sniffer.**`r`n-dontwarn org.conscrypt.**`r`n" }
 
 foreach ($file in @("$Root/native/engine/android/app/build.gradle", "$Root/native/engine/android/instantapp/build.gradle")) {
-    # 停用 libcocos 工程、旧 native 构建链和 Cocos 引擎目录中的重复 Java JAR。
+    #  libcocos  native  Cocos  Java JAR
     $text = Get-Content -Raw -LiteralPath $file
     $text = [regex]::Replace($text, '(?m)^([ \t]*)ndkVersion\s+PROP_NDK_VERSION', '$1ndkVersion "28.2.13676358"')
     $text = [regex]::Replace($text, "(?m)^([ \t]*)(implementation project\(':libcocos'\))", '$1// $2')
@@ -126,7 +126,7 @@ Set-Content -LiteralPath $manifest -Value $text -NoNewline
 if ($args -notcontains '--skip-download') {
     $release = Invoke-RestMethod 'https://api.github.com/repos/chuankuancao-png/cocos/releases/tags/3.8.8' -Headers @{ 'User-Agent' = 'cocos-android-packager' }
     $asset = $release.assets | Where-Object { $_.name -match '\.(zip|tar|gz|tgz)$' } | Sort-Object @{Expression={ if ($_.name -match 'android|lib') { 0 } else { 1 } }}, name | Select-Object -First 1
-    if (-not $asset) { throw '3.8.8 Release 没有找到 ZIP/TAR 资源' }
+    if (-not $asset) { throw '3.8.8 Release  ZIP/TAR ' }
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('cocos-3.8.8-' + [guid]::NewGuid())
     New-Item -ItemType Directory -Path $tmp | Out-Null
     $archive = Join-Path $tmp $asset.name
@@ -135,7 +135,7 @@ if ($args -notcontains '--skip-download') {
     } else {
         Invoke-WebRequest $asset.browser_download_url -OutFile $archive
     }
-    # 清空旧资源，保证 app/libs 只保留本次 3.8.8 Release 的内容。
+    #  app/libs  3.8.8 Release 
     $libs = "$Root/native/engine/android/app/libs"; New-Item -ItemType Directory -Force -Path $libs | Out-Null
     Get-ChildItem $libs -Force | Remove-Item -Recurse -Force
     $extract = Join-Path $tmp 'extract'; New-Item -ItemType Directory -Path $extract | Out-Null
@@ -143,21 +143,21 @@ if ($args -notcontains '--skip-download') {
     $source = Get-ChildItem $extract -Directory -Recurse | Where-Object Name -eq 'libs' | Select-Object -First 1
     if (-not $source) { $source = Get-Item $extract }
     Copy-Item "$($source.FullName)\*" $libs -Recurse -Force
-    # Gradle 会从这些目录加载本地依赖，删除会与 libcocos-release.aar 重复的 JAR。
+    # Gradle  libcocos-release.aar  JAR
     foreach ($dependencyDir in @($libs, "$Root/native/engine/android/libs", "$Root/build/android/proj/libservice/libs")) {
         if (Test-Path $dependencyDir) {
-            Get-ChildItem $dependencyDir -File | Where-Object { $_.Name -in @('com.android.vending.expansion.zipfile.jar', 'game-sdk.jar') -or $_.Name -like 'okhttp-*.jar' -or $_.Name -like 'okio-*.jar' } | ForEach-Object { Write-Host "删除重复依赖: $($_.Name)"; Remove-Item $_.FullName -Force }
+            Get-ChildItem $dependencyDir -File | Where-Object { $_.Name -in @('com.android.vending.expansion.zipfile.jar', 'game-sdk.jar') -or $_.Name -like 'okhttp-*.jar' -or $_.Name -like 'okio-*.jar' } | ForEach-Object { Write-Host ": $($_.Name)"; Remove-Item $_.FullName -Force }
         }
     }
     Remove-Item $tmp -Recurse -Force
 }
 
 function Install-AndroidComponents {
-    # 根据 local.properties 的 sdk.dir 检查并安装构建所需的 SDK、Build Tools 和 NDK。
-    # 使用 sdk_root 和 channel=1，确保能发现 Android 37 / Android 17 的新频道资源。
+    #  local.properties  sdk.dir  SDKBuild Tools  NDK
+    #  sdk_root  channel=1 Android 37 / Android 17 
     $localProperties = "$Root/build/android/proj/local.properties"
     $sdkLine = Get-Content $localProperties | Where-Object { $_ -match '^sdk\.dir=' } | Select-Object -First 1
-    if (-not $sdkLine) { throw 'local.properties 中未找到 sdk.dir' }
+    if (-not $sdkLine) { throw 'local.properties  sdk.dir' }
     $sdkDir = ($sdkLine -replace '^sdk\.dir=', '').Replace('\:', ':').Replace('\\', '\')
     $sdkManagerPath = (Get-Command sdkmanager.bat -ErrorAction SilentlyContinue).Source
     if (-not $sdkManagerPath) { $sdkManagerPath = (Get-Command sdkmanager -ErrorAction SilentlyContinue).Source }
@@ -181,10 +181,10 @@ function Install-AndroidComponents {
         }
     }
     if (-not $sdkManagerPath) {
-        # Android SDK Command-line Tools 未安装时，自动下载官方 Windows 工具包。
+        # Android SDK Command-line Tools  Windows 
         $toolsVersion = '15859902'
         $toolsUrl = "https://dl.google.com/android/repository/commandlinetools-win-${toolsVersion}_latest.zip"
-        # 临时目录保持较短，兼容未安装 tar.exe 的 Windows 环境。
+        #  tar.exe  Windows 
         $toolsTemp = Join-Path $env:TEMP ('a' + ([guid]::NewGuid().ToString('N').Substring(0, 8)))
         $toolsZip = Join-Path $toolsTemp 'commandlinetools.zip'
         $toolsExtract = Join-Path $toolsTemp 'extract'
@@ -202,7 +202,7 @@ function Install-AndroidComponents {
         Remove-Item $toolsTemp -Recurse -Force
         $sdkManagerPath = "$latestDir/bin/sdkmanager.bat"
     }
-    if (-not $sdkManagerPath) { throw "未找到 sdkmanager，请先安装 Android Command-line Tools: $sdkDir" }
+    if (-not $sdkManagerPath) { throw " sdkmanager Android Command-line Tools: $sdkDir" }
     if (-not (Test-Path "$sdkDir/platforms/android-37.0")) {
         Write-Host 'Installing missing Android component: platforms;android-37.0'
         & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37.0'
@@ -214,6 +214,6 @@ function Install-AndroidComponents {
 if ($args -notcontains '--no-build') {
     Use-Java21
     Install-AndroidComponents
-    # 使用 Gradle Wrapper 构建 Release APK/AAB。
+    #  Gradle Wrapper  Release APK/AAB
     Push-Location "$Root/build/android/proj"; try { & .\gradlew.bat assembleRelease } finally { Pop-Location }
 }
