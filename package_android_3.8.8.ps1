@@ -208,8 +208,11 @@ function Install-AndroidComponents {
         & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37'
         if ($LASTEXITCODE -ne 0 -or -not (Test-Path $platform37)) { throw 'Android platform 37 installation failed.' }
     }
-    $sdkList = & $sdkManagerPath ("--sdk_root=$sdkDir") '--list' 2>$null
-    $latestBuildTools = $sdkList | ForEach-Object { if ($_ -match '^s*build-tools;([0-9.]+)s') { $Matches[1] } } | Sort-Object { [version]$_ } -Descending | Select-Object -First 1
+    $savedErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $sdkList = @(& $sdkManagerPath ("--sdk_root=$sdkDir") '--list' 2>&1 | ForEach-Object { $_.ToString() })
+    $ErrorActionPreference = $savedErrorAction
+    $latestBuildTools = $sdkList | ForEach-Object { if ($_ -match '^ *build-tools;([0-9.]+) *') { $Matches[1] } } | Sort-Object { [version]$_ } -Descending | Select-Object -First 1
     if (-not $latestBuildTools) { throw 'No Android Build Tools package found.' }
     if (-not (Test-Path "$sdkDir/build-tools/$latestBuildTools")) { Write-Host "Installing latest Android Build Tools: $latestBuildTools"; & $sdkManagerPath ("--sdk_root=$sdkDir") "build-tools;$latestBuildTools" }
     if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { Write-Host 'Installing missing Android component: ndk;28.2.13676358'; & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=0' 'ndk;28.2.13676358' }
