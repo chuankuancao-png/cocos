@@ -61,6 +61,21 @@ function Use-Java21 {
     Write-Host "Using JDK 21: $javaHome"
 }
 
+function Ensure-DebugKeystore {
+    # Create a local Windows debug keystore instead of using the old macOS Cocos path.
+    $keystore = Join-Path $Root 'native\engine\android\app\debug.keystore'
+    if (-not (Test-Path $keystore)) {
+        $keytool = Join-Path $env:JAVA_HOME 'bin\keytool.exe'
+        & $keytool -genkeypair -v -keystore $keystore -storepass 123456 -alias debug_keystore -keypass 123456 -dname 'CN=Android Debug,O=Android,C=US' -keyalg RSA -keysize 2048 -validity 10000
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $keystore)) { throw 'Failed to create local debug keystore.' }
+    }
+    $propertiesPath = "$Root/build/android/proj/gradle.properties"
+    $propertiesText = Get-Content -Raw -LiteralPath $propertiesPath
+    $keystoreWin = $keystore.Replace('\', '\\')
+    $propertiesText = [regex]::Replace($propertiesText, '(?m)^RELEASE_STORE_FILE=.*$', "RELEASE_STORE_FILE=$keystoreWin")
+    Set-Content -LiteralPath $propertiesPath -Value $propertiesText -NoNewline
+}
+
 function Comment-ExternalNativeBuild([string]$Path) {
     #  app  instantapp  externalNativeBuild  AAR
     $lines = [System.IO.File]::ReadAllLines($Path)
@@ -159,14 +174,14 @@ function Install-AndroidComponents {
     $sdkLine = Get-Content $localProperties | Where-Object { $_ -match '^sdk\.dir=' } | Select-Object -First 1
     if (-not $sdkLine) { throw 'local.properties  sdk.dir' }
     $sdkDir = ($sdkLine -replace '^sdk\.dir=', '').Replace('\:', ':').Replace('\\', '\')
-    $androidCliPath = (Get-Command android.bat -ErrorAction SilentlyContinue).Source
-    if (-not $androidCliPath) { $androidCliPath = (Get-Command android.exe -ErrorAction SilentlyContinue).Source }
-    if (-not $androidCliPath) {
-        foreach ($candidate in @("$sdkDir/cmdline-tools/latest/bin/android.bat", "$sdkDir/cmdline-tools/latest/bin/android.exe", "$sdkDir/cmdline-tools/bin/android.bat", "$sdkDir/tools/bin/android.bat")) {
-            if (Test-Path $candidate) { $androidCliPath = (Resolve-Path $candidate).Path; break }
+    $sdkManagerPath = (Get-Command sdkmanager.bat -ErrorAction SilentlyContinue).Source
+    if (-not $sdkManagerPath) { $sdkManagerPath = (Get-Command sdkmanager -ErrorAction SilentlyContinue).Source }
+    if (-not $sdkManagerPath) {
+        foreach ($candidate in @("$sdkDir/cmdline-tools/latest/bin/sdkmanager.bat", "$sdkDir/cmdline-tools/bin/sdkmanager.bat", "$sdkDir/tools/bin/sdkmanager.bat")) {
+            if (Test-Path $candidate) { $sdkManagerPath = (Resolve-Path $candidate).Path; break }
         }
     }
-    if (-not $androidCliPath) {
+    if (-not $sdkManagerPath) {
         $searchRoots = @(
             "$sdkDir/cmdline-tools",
             "$env:ANDROID_HOME/cmdline-tools",
@@ -176,11 +191,11 @@ function Install-AndroidComponents {
             "$env:ProgramFiles/Android/Android Studio/bin"
         ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
         foreach ($searchRoot in $searchRoots) {
-            $found = Get-ChildItem $searchRoot -Recurse -File -Include 'android.bat', 'android.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($found) { $androidCliPath = $found.FullName; break }
+            $found = Get-ChildItem $searchRoot -Recurse -File -Include 'sdkmanager.bat', 'sdkmanager.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $sdkManagerPath = $found.FullName; break }
         }
     }
-    if (-not $androidCliPath) {
+    if (-not $sdkManagerPath) {
         # Android SDK Command-line Tools  Windows 
         $toolsUrl = 'https://dl.google.com/android/repository/commandlinetools-win-latest.zip'
         #  tar.exe  Windows 
@@ -199,16 +214,29 @@ function Install-AndroidComponents {
         New-Item -ItemType Directory -Path $latestDir -Force | Out-Null
         Copy-Item "$(Join-Path $toolsExtract 'cmdline-tools')\*" $latestDir -Recurse -Force
         Remove-Item $toolsTemp -Recurse -Force
-        $androidCliPath = "$latestDir/bin/android.bat"
+        $sdkManagerPath = "$latestDir/bin/sdkmanager.bat"
     }
-    if (-not $androidCliPath) { throw " Android CLI Android Command-line Tools: $sdkDir" }
-    Write-Host 'Installing Android 37, latest Build Tools, and NDK 28.2.13676358'
-    & $androidCliPath "--sdk=$sdkDir" 'sdk' 'install' 'platforms/android-37' 'build-tools' 'ndk/28.2.13676358'
-    if ($LASTEXITCODE -ne 0) { throw 'Android CLI failed to install required SDK components.' }
+    if (-not $sdkManagerPath) { throw " sdkmanager Android Command-line Tools: $sdkDir" }
+    Write-Host 'Installing Android platform 37.0, Build Tools 37.0.0, and NDK 28.2.13676358'
+    $savedErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 2>&1 | ForEach-Object { Write-Host $_ }
+    $installExitCode = $LASTEXITCODE
+    $ErrorActionPreference = $savedErrorAction
+    $platform37 = "$sdkDir/platforms/android-37"
+    $platform370 = "$sdkDir/platforms/android-37.0"
+    if (-not (Test-Path $platform37) -and (Test-Path $platform370)) {
+        Write-Host 'Creating Gradle-compatible Android platform alias: android-37'
+        Copy-Item $platform370 $platform37 -Recurse -Force
+    }
+    if ($installExitCode -ne 0 -or -not (Test-Path $platform37) -or -not (Test-Path "$sdkDir/build-tools/37.0.0") -or -not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) {
+        throw 'sdkmanager failed to install the required SDK components.'
+    }
 }
 
 if ($args -notcontains '--no-build') {
     Use-Java21
+    Ensure-DebugKeystore
     Install-AndroidComponents
     #  Gradle Wrapper  Release APK/AAB
     Push-Location "$Root/build/android/proj"; try { & .\gradlew.bat assembleRelease } finally { Pop-Location }
