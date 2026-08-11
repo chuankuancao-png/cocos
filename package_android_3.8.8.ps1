@@ -127,9 +127,40 @@ function Install-AndroidComponents {
             if (Test-Path $candidate) { $sdkManagerPath = (Resolve-Path $candidate).Path; break }
         }
     }
-    if (-not $sdkManagerPath -and (Test-Path "$sdkDir/cmdline-tools")) {
-        $found = Get-ChildItem "$sdkDir/cmdline-tools" -Recurse -File -Include 'sdkmanager.bat', 'sdkmanager.exe' | Select-Object -First 1
-        if ($found) { $sdkManagerPath = $found.FullName }
+    if (-not $sdkManagerPath) {
+        $searchRoots = @(
+            "$sdkDir/cmdline-tools",
+            "$env:ANDROID_HOME/cmdline-tools",
+            "$env:ANDROID_SDK_ROOT/cmdline-tools",
+            "$env:LOCALAPPDATA/Android/Sdk/cmdline-tools",
+            "$env:ProgramFiles/Android/Android Studio",
+            "$env:ProgramFiles/Android/Android Studio/bin"
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
+        foreach ($searchRoot in $searchRoots) {
+            $found = Get-ChildItem $searchRoot -Recurse -File -Include 'sdkmanager.bat', 'sdkmanager.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $sdkManagerPath = $found.FullName; break }
+        }
+    }
+    if (-not $sdkManagerPath) {
+        # Android SDK Command-line Tools 未安装时，自动下载官方 Windows 工具包。
+        $toolsVersion = '15859902'
+        $toolsUrl = "https://dl.google.com/android/repository/commandlinetools-win-${toolsVersion}_latest.zip"
+        $toolsTemp = Join-Path ([System.IO.Path]::GetTempPath()) ('android-cmdline-tools-' + [guid]::NewGuid())
+        $toolsZip = Join-Path $toolsTemp 'commandlinetools.zip'
+        $toolsExtract = Join-Path $toolsTemp 'extract'
+        New-Item -ItemType Directory -Path $toolsExtract -Force | Out-Null
+        Write-Host 'Android SDK Command-line Tools not found; downloading official tools...'
+        if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+            & curl.exe -fL --retry 3 --output $toolsZip $toolsUrl
+        } else {
+            Invoke-WebRequest $toolsUrl -OutFile $toolsZip
+        }
+        Expand-Archive $toolsZip -DestinationPath $toolsExtract -Force
+        $latestDir = "$sdkDir/cmdline-tools/latest"
+        New-Item -ItemType Directory -Path $latestDir -Force | Out-Null
+        Copy-Item "$(Join-Path $toolsExtract 'cmdline-tools')\*" $latestDir -Recurse -Force
+        Remove-Item $toolsTemp -Recurse -Force
+        $sdkManagerPath = "$latestDir/bin/sdkmanager.bat"
     }
     if (-not $sdkManagerPath) { throw "未找到 sdkmanager，请先安装 Android Command-line Tools: $sdkDir" }
     if (-not (Test-Path "$sdkDir/platforms/android-37.0")) {
