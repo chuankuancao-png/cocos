@@ -159,14 +159,14 @@ function Install-AndroidComponents {
     $sdkLine = Get-Content $localProperties | Where-Object { $_ -match '^sdk\.dir=' } | Select-Object -First 1
     if (-not $sdkLine) { throw 'local.properties  sdk.dir' }
     $sdkDir = ($sdkLine -replace '^sdk\.dir=', '').Replace('\:', ':').Replace('\\', '\')
-    $sdkManagerPath = (Get-Command sdkmanager.bat -ErrorAction SilentlyContinue).Source
-    if (-not $sdkManagerPath) { $sdkManagerPath = (Get-Command sdkmanager -ErrorAction SilentlyContinue).Source }
-    if (-not $sdkManagerPath) {
-        foreach ($candidate in @("$sdkDir/cmdline-tools/latest/bin/sdkmanager.bat", "$sdkDir/cmdline-tools/bin/sdkmanager.bat", "$sdkDir/tools/bin/sdkmanager.bat")) {
-            if (Test-Path $candidate) { $sdkManagerPath = (Resolve-Path $candidate).Path; break }
+    $androidCliPath = (Get-Command android.bat -ErrorAction SilentlyContinue).Source
+    if (-not $androidCliPath) { $androidCliPath = (Get-Command android.exe -ErrorAction SilentlyContinue).Source }
+    if (-not $androidCliPath) {
+        foreach ($candidate in @("$sdkDir/cmdline-tools/latest/bin/android.bat", "$sdkDir/cmdline-tools/latest/bin/android.exe", "$sdkDir/cmdline-tools/bin/android.bat", "$sdkDir/tools/bin/android.bat")) {
+            if (Test-Path $candidate) { $androidCliPath = (Resolve-Path $candidate).Path; break }
         }
     }
-    if (-not $sdkManagerPath) {
+    if (-not $androidCliPath) {
         $searchRoots = @(
             "$sdkDir/cmdline-tools",
             "$env:ANDROID_HOME/cmdline-tools",
@@ -176,11 +176,11 @@ function Install-AndroidComponents {
             "$env:ProgramFiles/Android/Android Studio/bin"
         ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
         foreach ($searchRoot in $searchRoots) {
-            $found = Get-ChildItem $searchRoot -Recurse -File -Include 'sdkmanager.bat', 'sdkmanager.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($found) { $sdkManagerPath = $found.FullName; break }
+            $found = Get-ChildItem $searchRoot -Recurse -File -Include 'android.bat', 'android.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { $androidCliPath = $found.FullName; break }
         }
     }
-    if (-not $sdkManagerPath) {
+    if (-not $androidCliPath) {
         # Android SDK Command-line Tools  Windows 
         $toolsUrl = 'https://dl.google.com/android/repository/commandlinetools-win-latest.zip'
         #  tar.exe  Windows 
@@ -199,23 +199,12 @@ function Install-AndroidComponents {
         New-Item -ItemType Directory -Path $latestDir -Force | Out-Null
         Copy-Item "$(Join-Path $toolsExtract 'cmdline-tools')\*" $latestDir -Recurse -Force
         Remove-Item $toolsTemp -Recurse -Force
-        $sdkManagerPath = "$latestDir/bin/sdkmanager.bat"
+        $androidCliPath = "$latestDir/bin/android.bat"
     }
-    if (-not $sdkManagerPath) { throw " sdkmanager Android Command-line Tools: $sdkDir" }
-    $platform37 = "$sdkDir/platforms/android-37"
-    if (-not (Test-Path $platform37)) {
-        Write-Host 'Installing Android platform 37'
-        & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37'
-        if ($LASTEXITCODE -ne 0 -or -not (Test-Path $platform37)) { throw 'Android platform 37 installation failed.' }
-    }
-    $savedErrorAction = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    $sdkList = @(& $sdkManagerPath ("--sdk_root=$sdkDir") '--list' 2>&1 | ForEach-Object { $_.ToString() })
-    $ErrorActionPreference = $savedErrorAction
-    $latestBuildTools = $sdkList | ForEach-Object { if ($_ -match '^ *build-tools;([0-9.]+) *') { $Matches[1] } } | Sort-Object { [version]$_ } -Descending | Select-Object -First 1
-    if (-not $latestBuildTools) { throw 'No Android Build Tools package found.' }
-    if (-not (Test-Path "$sdkDir/build-tools/$latestBuildTools")) { Write-Host "Installing latest Android Build Tools: $latestBuildTools"; & $sdkManagerPath ("--sdk_root=$sdkDir") "build-tools;$latestBuildTools" }
-    if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { Write-Host 'Installing missing Android component: ndk;28.2.13676358'; & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=0' 'ndk;28.2.13676358' }
+    if (-not $androidCliPath) { throw " Android CLI Android Command-line Tools: $sdkDir" }
+    Write-Host 'Installing Android 37, latest Build Tools, and NDK 28.2.13676358'
+    & $androidCliPath "--sdk=$sdkDir" 'sdk' 'install' 'platforms/android-37' 'build-tools' 'ndk/28.2.13676358'
+    if ($LASTEXITCODE -ne 0) { throw 'Android CLI failed to install required SDK components.' }
 }
 
 if ($args -notcontains '--no-build') {
