@@ -197,7 +197,7 @@ function Install-AndroidComponents {
     }
     if (-not $sdkManagerPath) {
         # Android SDK Command-line Tools  Windows 
-        $toolsUrl = 'https://dl.google.com/android/repository/commandlinetools-win-latest.zip'
+        $toolsUrl = 'https://dl.google.com/android/repository/commandlinetools-win-15859902_latest.zip'
         #  tar.exe  Windows 
         $toolsTemp = Join-Path $env:TEMP ('a' + ([guid]::NewGuid().ToString('N').Substring(0, 8)))
         $toolsZip = Join-Path $toolsTemp 'commandlinetools.zip'
