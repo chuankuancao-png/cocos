@@ -23,7 +23,14 @@ function Replace-Text([string]$Path, [string]$Old, [string]$New) {
 }
 
 function Expand-Zip([string]$Archive, [string]$Destination) {
-    # PowerShell 5.1 的 Expand-Archive 在部分 Android 工具 ZIP 上会误报删除临时文件失败。
+    # Windows PowerShell 5.1 的 Expand-Archive 和 .NET 解压都可能碰到深层 ZIP 路径。
+    # Windows 10/11 自带的 tar.exe 能正确处理 Android Command-line Tools 的长路径。
+    $tar = Get-Command tar.exe -ErrorAction SilentlyContinue
+    if ($tar) {
+        & $tar.Source -xf $Archive -C $Destination
+        if ($LASTEXITCODE -ne 0) { throw "tar.exe 解压失败: $Archive" }
+        return
+    }
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [System.IO.Compression.ZipFile]::ExtractToDirectory($Archive, $Destination)
 }
@@ -151,7 +158,8 @@ function Install-AndroidComponents {
         # Android SDK Command-line Tools 未安装时，自动下载官方 Windows 工具包。
         $toolsVersion = '15859902'
         $toolsUrl = "https://dl.google.com/android/repository/commandlinetools-win-${toolsVersion}_latest.zip"
-        $toolsTemp = Join-Path ([System.IO.Path]::GetTempPath()) ('android-cmdline-tools-' + [guid]::NewGuid())
+        # 临时目录保持较短，兼容未安装 tar.exe 的 Windows 环境。
+        $toolsTemp = Join-Path $env:TEMP ('a' + ([guid]::NewGuid().ToString('N').Substring(0, 8)))
         $toolsZip = Join-Path $toolsTemp 'commandlinetools.zip'
         $toolsExtract = Join-Path $toolsTemp 'extract'
         New-Item -ItemType Directory -Path $toolsExtract -Force | Out-Null
