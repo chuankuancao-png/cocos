@@ -22,6 +22,12 @@ function Replace-Text([string]$Path, [string]$Old, [string]$New) {
     Set-Content -LiteralPath $Path -Value $text -NoNewline
 }
 
+function Expand-Zip([string]$Archive, [string]$Destination) {
+    # PowerShell 5.1 的 Expand-Archive 在部分 Android 工具 ZIP 上会误报删除临时文件失败。
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($Archive, $Destination)
+}
+
 function Comment-ExternalNativeBuild([string]$Path) {
     # 注释 app 和 instantapp 中全部 externalNativeBuild 块，改用预编译 AAR。
     $lines = [System.IO.File]::ReadAllLines($Path)
@@ -100,7 +106,7 @@ if ($args -notcontains '--skip-download') {
     $libs = "$Root/native/engine/android/app/libs"; New-Item -ItemType Directory -Force -Path $libs | Out-Null
     Get-ChildItem $libs -Force | Remove-Item -Recurse -Force
     $extract = Join-Path $tmp 'extract'; New-Item -ItemType Directory -Path $extract | Out-Null
-    if ($asset.name -match '\.zip$') { Expand-Archive $archive -DestinationPath $extract } else { tar -xf $archive -C $extract }
+    if ($asset.name -match '\.zip$') { Expand-Zip $archive $extract } else { tar -xf $archive -C $extract }
     $source = Get-ChildItem $extract -Directory -Recurse | Where-Object Name -eq 'libs' | Select-Object -First 1
     if (-not $source) { $source = Get-Item $extract }
     Copy-Item "$($source.FullName)\*" $libs -Recurse -Force
@@ -155,7 +161,7 @@ function Install-AndroidComponents {
         } else {
             Invoke-WebRequest $toolsUrl -OutFile $toolsZip
         }
-        Expand-Archive $toolsZip -DestinationPath $toolsExtract -Force
+        Expand-Zip $toolsZip $toolsExtract
         $latestDir = "$sdkDir/cmdline-tools/latest"
         New-Item -ItemType Directory -Path $latestDir -Force | Out-Null
         Copy-Item "$(Join-Path $toolsExtract 'cmdline-tools')\*" $latestDir -Recurse -Force
