@@ -110,6 +110,7 @@ if ($args -notcontains '--skip-download') {
 
 function Install-AndroidComponents {
     # 根据 local.properties 的 sdk.dir 检查并安装构建所需的 SDK、Build Tools 和 NDK。
+    # 使用 sdk_root 和 channel=1，确保能发现 Android 37 / Android 17 的新频道资源。
     $localProperties = "$Root/build/android/proj/local.properties"
     $sdkLine = Get-Content $localProperties | Where-Object { $_ -match '^sdk\.dir=' } | Select-Object -First 1
     if (-not $sdkLine) { throw 'local.properties 中未找到 sdk.dir' }
@@ -121,11 +122,12 @@ function Install-AndroidComponents {
         }
     }
     if (-not $sdkManager) { throw "未找到 sdkmanager: $sdkDir" }
-    $packages = @()
-    if (-not (Test-Path "$sdkDir/platforms/android-37")) { $packages += 'platforms;android-37' }
-    if (-not (Test-Path "$sdkDir/build-tools/37.0.0")) { $packages += 'build-tools;37.0.0' }
-    if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { $packages += 'ndk;28.2.13676358' }
-    if ($packages.Count -gt 0) { Write-Host "Installing missing Android components: $($packages -join ', ')"; & $sdkManager.Source $packages }
+    if (-not (Test-Path "$sdkDir/platforms/android-37")) {
+        Write-Host 'Installing missing Android component: platforms;android-37'
+        & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37'
+    }
+    if (-not (Test-Path "$sdkDir/build-tools/37.0.0")) { Write-Host 'Installing missing Android component: build-tools;37.0.0'; & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=1' 'build-tools;37.0.0' }
+    if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { Write-Host 'Installing missing Android component: ndk;28.2.13676358'; & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=0' 'ndk;28.2.13676358' }
 }
 
 if ($args -notcontains '--no-build') {
