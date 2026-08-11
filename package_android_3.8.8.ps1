@@ -97,6 +97,13 @@ Replace-Text "$Root/build/android/proj/gradle/wrapper/gradle-wrapper.properties"
 Replace-Text "$Root/build/android/proj/gradle.properties" 'PROP_MIN_SDK_VERSION=21' 'PROP_MIN_SDK_VERSION=24'
 Replace-Text "$Root/build/android/proj/gradle.properties" 'PROP_COMPILE_SDK_VERSION=36' 'PROP_COMPILE_SDK_VERSION=37'
 Replace-Text "$Root/build/android/proj/gradle.properties" 'PROP_TARGET_SDK_VERSION=36' 'PROP_TARGET_SDK_VERSION=37'
+foreach ($compileFile in @(
+    "$Root/native/engine/android/app/build.gradle",
+    "$Root/native/engine/android/instantapp/build.gradle",
+    "$Root/build/android/proj/libservice/build.gradle"
+)) {
+    Replace-Text $compileFile 'compileSdkVersion PROP_COMPILE_SDK_VERSION.toInteger()' 'compileSdkVersion PROP_COMPILE_SDK_VERSION'
+}
 # Release AAR  Android API 24 API 21
 
 # R8  Cocos  okhttp 
@@ -223,15 +230,23 @@ function Install-AndroidComponents {
     & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358' 2>&1 | ForEach-Object { Write-Host $_ }
     $installExitCode = $LASTEXITCODE
     $ErrorActionPreference = $savedErrorAction
-    $platform37 = "$sdkDir/platforms/android-37"
     $platform370 = "$sdkDir/platforms/android-37.0"
-    if (-not (Test-Path $platform37) -and (Test-Path $platform370)) {
-        Write-Host 'Creating Gradle-compatible Android platform alias: android-37'
-        Copy-Item $platform370 $platform37 -Recurse -Force
+    $staleAlias = "$sdkDir/platforms/android-37"
+    $staleSource = "$staleAlias/source.properties"
+    if (Test-Path $staleSource) {
+        $stalePackage = Get-Content -Raw -LiteralPath $staleSource
+        if ($stalePackage -match 'Pkg.Path=platforms;android-37.0') {
+            Write-Host 'Removing stale android-37 alias; using the real android-37.0 platform.'
+            Remove-Item $staleAlias -Recurse -Force
+        }
     }
-    if ($installExitCode -ne 0 -or -not (Test-Path $platform37) -or -not (Test-Path "$sdkDir/build-tools/37.0.0") -or -not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) {
+    if ($installExitCode -ne 0 -or -not (Test-Path $platform370) -or -not (Test-Path "$sdkDir/build-tools/37.0.0") -or -not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) {
         throw 'sdkmanager failed to install the required SDK components.'
     }
+    $propertiesPath = "$Root/build/android/proj/gradle.properties"
+    $propertiesText = Get-Content -Raw -LiteralPath $propertiesPath
+    $propertiesText = [regex]::Replace($propertiesText, '(?m)^PROP_COMPILE_SDK_VERSION=.*$', 'PROP_COMPILE_SDK_VERSION=37.0')
+    Set-Content -LiteralPath $propertiesPath -Value $propertiesText -NoNewline
 }
 
 if ($args -notcontains '--no-build') {
