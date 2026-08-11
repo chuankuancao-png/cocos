@@ -37,8 +37,8 @@ function Expand-Zip([string]$Archive, [string]$Destination) {
 
 function Use-Java21 {
     # 固定使用 JDK 21，避免不同电脑上的 Android Studio JBR 版本不一致。
-    $javaHome = Join-Path $env:LOCALAPPDATA 'Androidjdk-21'
-    $javaExe = Join-Path $javaHome 'bin\java.exe'
+    $javaHome = Join-Path $env:LOCALAPPDATA "Android\jdk-21"
+    $javaExe = Join-Path $javaHome "bin\java.exe"
     if (-not (Test-Path $javaExe)) {
         $javaTemp = Join-Path $env:TEMP ('j21' + ([guid]::NewGuid().ToString('N').Substring(0, 8)))
         $javaZip = Join-Path $javaTemp 'jdk21.zip'
@@ -56,7 +56,7 @@ function Use-Java21 {
     }
     if (-not (Test-Path $javaExe)) { throw 'JDK 21 安装失败，未找到 java.exe。' }
     $env:JAVA_HOME = $javaHome
-    $javaBin = Join-Path $javaHome 'bin'
+    $javaBin = Join-Path $javaHome "bin"
     $env:Path = "$javaBin;$env:Path"
     Write-Host "Using JDK 21: $javaHome"
 }
