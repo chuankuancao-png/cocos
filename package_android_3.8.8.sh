@@ -84,8 +84,13 @@ if [[ "$SKIP_DOWNLOAD" == false ]]; then
   shopt -s dotglob
   mv "$source_dir"/* "$libs"/
   shopt -u dotglob
-  if [[ -f "$libs/libcocos-release.aar" ]]; then
-    rm -f "$libs/com.android.vending.expansion.zipfile.jar" "$libs/game-sdk.jar" "$libs"/okhttp-*.jar "$libs"/okio-*.jar
+  if find "$libs" -maxdepth 1 -type f -name 'libcocos-*.aar' -print -quit | grep -q .; then
+    find "$libs" -maxdepth 1 -type f \( \
+      -name 'com.android.vending.expansion.zipfile.jar' -o \
+      -name 'game-sdk.jar' -o \
+      -name 'okhttp-*.jar' -o \
+      -name 'okio-*.jar' \
+    \) -print -delete
   fi
 fi
 
