@@ -8,7 +8,8 @@ $ErrorActionPreference = 'Stop'
 # 4. 清理与 libcocos-release.aar 重复的 game-sdk、okhttp、okio 等 JAR。
 # 5. 将最低 Android 版本调整为 API 24，因为 libcocos-release.aar 要求 API 24。
 # 6. 增加 R8 对 okhttp 可选依赖的忽略规则。
-# 7. 下载 3.8.8 Release 资源到 app/libs，并执行 assembleRelease。
+# 7. 检查并自动安装 Android 37、Build Tools 37.0.0 和 NDK 28.2.13676358。
+# 8. 下载 3.8.8 Release 资源到 app/libs，并执行 assembleRelease。
 #
 # 使用方式：在项目根目录执行 .\package_android_3.8.8.ps1
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '.')).Path
@@ -40,6 +41,8 @@ Replace-Text "$Root/build/android/proj/build.gradle" 'com.android.tools.build:gr
 Replace-Text "$Root/native/engine/android/build.gradle" 'com.android.tools.build:gradle:8.10.1' 'com.android.tools.build:gradle:8.13.2'
 Replace-Text "$Root/build/android/proj/gradle/wrapper/gradle-wrapper.properties" 'gradle-8.11.1-bin.zip' 'gradle-8.13-bin.zip'
 Replace-Text "$Root/build/android/proj/gradle.properties" 'PROP_MIN_SDK_VERSION=21' 'PROP_MIN_SDK_VERSION=24'
+Replace-Text "$Root/build/android/proj/gradle.properties" 'PROP_COMPILE_SDK_VERSION=36' 'PROP_COMPILE_SDK_VERSION=37'
+Replace-Text "$Root/build/android/proj/gradle.properties" 'PROP_TARGET_SDK_VERSION=36' 'PROP_TARGET_SDK_VERSION=37'
 # Release AAR 的最低系统版本是 Android API 24，不能继续使用 API 21。
 
 # R8 会检查 Cocos 重打包 okhttp 引用的可选依赖；这些依赖不是运行必需项。
@@ -105,6 +108,28 @@ if ($args -notcontains '--skip-download') {
     Remove-Item $tmp -Recurse -Force
 }
 
-if ($args -notcontains '--no-build') { # 使用 Gradle Wrapper 构建 Release APK/AAB。
+function Install-AndroidComponents {
+    # 根据 local.properties 的 sdk.dir 检查并安装构建所需的 SDK、Build Tools 和 NDK。
+    $localProperties = "$Root/build/android/proj/local.properties"
+    $sdkLine = Get-Content $localProperties | Where-Object { $_ -match '^sdk\.dir=' } | Select-Object -First 1
+    if (-not $sdkLine) { throw 'local.properties 中未找到 sdk.dir' }
+    $sdkDir = ($sdkLine -replace '^sdk\.dir=', '').Replace('\:', ':').Replace('\\', '\')
+    $sdkManager = Get-Command sdkmanager -ErrorAction SilentlyContinue
+    if (-not $sdkManager) {
+        foreach ($candidate in @("$sdkDir/cmdline-tools/latest/bin/sdkmanager.bat", "$sdkDir/cmdline-tools/bin/sdkmanager.bat", "$sdkDir/tools/bin/sdkmanager.bat")) {
+            if (Test-Path $candidate) { $sdkManager = Get-Item $candidate; break }
+        }
+    }
+    if (-not $sdkManager) { throw "未找到 sdkmanager: $sdkDir" }
+    $packages = @()
+    if (-not (Test-Path "$sdkDir/platforms/android-37")) { $packages += 'platforms;android-37' }
+    if (-not (Test-Path "$sdkDir/build-tools/37.0.0")) { $packages += 'build-tools;37.0.0' }
+    if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { $packages += 'ndk;28.2.13676358' }
+    if ($packages.Count -gt 0) { Write-Host "Installing missing Android components: $($packages -join ', ')"; & $sdkManager.Source $packages }
+}
+
+if ($args -notcontains '--no-build') {
+    Install-AndroidComponents
+    # 使用 Gradle Wrapper 构建 Release APK/AAB。
     Push-Location "$Root/build/android/proj"; try { & .\gradlew.bat assembleRelease } finally { Pop-Location }
 }
