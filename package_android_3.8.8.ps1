@@ -90,7 +90,12 @@ if ($args -notcontains '--skip-download') {
     if (-not $asset) { throw '3.8.8 Release 没有找到 ZIP/TAR 资源' }
     $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('cocos-3.8.8-' + [guid]::NewGuid())
     New-Item -ItemType Directory -Path $tmp | Out-Null
-    $archive = Join-Path $tmp $asset.name; Invoke-WebRequest $asset.browser_download_url -OutFile $archive
+    $archive = Join-Path $tmp $asset.name
+    if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+        & curl.exe -fL --retry 3 --output $archive $asset.browser_download_url
+    } else {
+        Invoke-WebRequest $asset.browser_download_url -OutFile $archive
+    }
     # 清空旧资源，保证 app/libs 只保留本次 3.8.8 Release 的内容。
     $libs = "$Root/native/engine/android/app/libs"; New-Item -ItemType Directory -Force -Path $libs | Out-Null
     Get-ChildItem $libs -Force | Remove-Item -Recurse -Force
@@ -115,19 +120,24 @@ function Install-AndroidComponents {
     $sdkLine = Get-Content $localProperties | Where-Object { $_ -match '^sdk\.dir=' } | Select-Object -First 1
     if (-not $sdkLine) { throw 'local.properties 中未找到 sdk.dir' }
     $sdkDir = ($sdkLine -replace '^sdk\.dir=', '').Replace('\:', ':').Replace('\\', '\')
-    $sdkManager = Get-Command sdkmanager -ErrorAction SilentlyContinue
-    if (-not $sdkManager) {
+    $sdkManagerPath = (Get-Command sdkmanager.bat -ErrorAction SilentlyContinue).Source
+    if (-not $sdkManagerPath) { $sdkManagerPath = (Get-Command sdkmanager -ErrorAction SilentlyContinue).Source }
+    if (-not $sdkManagerPath) {
         foreach ($candidate in @("$sdkDir/cmdline-tools/latest/bin/sdkmanager.bat", "$sdkDir/cmdline-tools/bin/sdkmanager.bat", "$sdkDir/tools/bin/sdkmanager.bat")) {
-            if (Test-Path $candidate) { $sdkManager = Get-Item $candidate; break }
+            if (Test-Path $candidate) { $sdkManagerPath = (Resolve-Path $candidate).Path; break }
         }
     }
-    if (-not $sdkManager) { throw "未找到 sdkmanager: $sdkDir" }
+    if (-not $sdkManagerPath -and (Test-Path "$sdkDir/cmdline-tools")) {
+        $found = Get-ChildItem "$sdkDir/cmdline-tools" -Recurse -File -Include 'sdkmanager.bat', 'sdkmanager.exe' | Select-Object -First 1
+        if ($found) { $sdkManagerPath = $found.FullName }
+    }
+    if (-not $sdkManagerPath) { throw "未找到 sdkmanager，请先安装 Android Command-line Tools: $sdkDir" }
     if (-not (Test-Path "$sdkDir/platforms/android-37.0")) {
         Write-Host 'Installing missing Android component: platforms;android-37.0'
-        & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37.0'
+        & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'platforms;android-37.0'
     }
-    if (-not (Test-Path "$sdkDir/build-tools/37.0.0")) { Write-Host 'Installing missing Android component: build-tools;37.0.0'; & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=1' 'build-tools;37.0.0' }
-    if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { Write-Host 'Installing missing Android component: ndk;28.2.13676358'; & $sdkManager.Source ("--sdk_root=$sdkDir") '--channel=0' 'ndk;28.2.13676358' }
+    if (-not (Test-Path "$sdkDir/build-tools/37.0.0")) { Write-Host 'Installing missing Android component: build-tools;37.0.0'; & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=1' 'build-tools;37.0.0' }
+    if (-not (Test-Path "$sdkDir/ndk/28.2.13676358/source.properties")) { Write-Host 'Installing missing Android component: ndk;28.2.13676358'; & $sdkManagerPath ("--sdk_root=$sdkDir") '--channel=0' 'ndk;28.2.13676358' }
 }
 
 if ($args -notcontains '--no-build') {
