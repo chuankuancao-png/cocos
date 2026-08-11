@@ -84,6 +84,9 @@ if [[ "$SKIP_DOWNLOAD" == false ]]; then
   shopt -s dotglob
   mv "$source_dir"/* "$libs"/
   shopt -u dotglob
+  if [[ -f "$libs/libcocos-release.aar" ]]; then
+    rm -f "$libs/com.android.vending.expansion.zipfile.jar" "$libs/game-sdk.jar" "$libs"/okhttp-*.jar "$libs"/okio-*.jar
+  fi
 fi
 
 if [[ "$NO_BUILD" == false ]]; then
